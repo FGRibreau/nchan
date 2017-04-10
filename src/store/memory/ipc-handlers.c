@@ -94,6 +94,7 @@ union subdata_u {
 };
 
 typedef struct {
+  ngx_int_t                    pad;
   ngx_str_t                   *shm_chid;
   store_channel_head_shm_t    *shared_channel_data;
   nchan_loc_conf_t            *cf;
@@ -101,6 +102,15 @@ typedef struct {
   union subdata_u              d;
   
 } subscribe_data_t;
+
+static void verify_subdata(subscribe_data_t *d, ngx_int_t match_owher_slot) {
+  assert(d->pad == 3483712);
+  assert(nchan_ngx_str_match(d->shm_chid, d->shm_chid_again));
+  if(match_owher_slot >= 0) {
+    assert(memstore_str_owner(d->shm_chid) == match_owher_slot);
+    assert(memstore_str_owner(d->shm_chid_again) == match_owher_slot);
+  }
+}
 
 ngx_int_t memstore_ipc_send_subscribe(ngx_int_t dst, ngx_str_t *chid, memstore_channel_head_t *origin_chanhead, nchan_loc_conf_t *cf) {
   DBG("send subscribe to %i, %V", dst, chid);
@@ -118,20 +128,23 @@ ngx_int_t memstore_ipc_send_subscribe(ngx_int_t dst, ngx_str_t *chid, memstore_c
   data.d.origin_chanhead = origin_chanhead;
   data.cf = cf;
   
-  assert(memstore_str_owner(data.shm_chid) == dst);
+  //debug stuff
+  data.pad = 3483712;
   data.shm_chid_again = str_shm_copy(chid);
-  
+  verify_subdata(&data, dst);
   
   return ipc_cmd(subscribe, dst, &data);
 }
 static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
   memstore_channel_head_t    *head;
   subscriber_t               *ipc_sub = NULL;
-  
-  assert(memstore_str_owner(d->shm_chid) == memstore_slot());
+  ngx_int_t                   myslot = memstore_slot();
+  verify_subdata(d, myslot);
   
   DBG("received subscribe request for channel %V", d->shm_chid);
   head = nchan_memstore_get_chanhead(d->shm_chid, d->cf);
+  
+  verify_subdata(d, myslot);
   
   if(head == NULL) {
     ERR("couldn't get chanhead while receiving subscribe ipc msg");
@@ -140,10 +153,12 @@ static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
   }
   else {
     ipc_sub = memstore_ipc_subscriber_create(sender, &head->id, d->cf, d->d.origin_chanhead);
+    verify_subdata(d, myslot);
     d->d.subscriber = ipc_sub;
     d->shared_channel_data = head->shared;
     assert(d->shared_channel_data);
   }
+  verify_subdata(d, myslot);
   
   ipc_cmd(subscribe_reply, sender, d);
   DBG("sent subscribe reply for channel %V to %i", d->shm_chid, sender);
@@ -157,6 +172,7 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   store_channel_head_shm_t     *old_shared;
   DBG("received subscribe reply for channel %V", d->shm_chid);
   //we have the chanhead address, but are too afraid to use it.
+  verify_subdata(d, sender);
   
   if(!d->shared_channel_data && !d->d.subscriber) {
     ERR("failed to subscribe");
@@ -167,6 +183,7 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
     ERR("Error regarding an aspect of life or maybe freshly fallen cookie crumbles");
     return;
   }
+  verify_subdata(d, sender);
   
   old_shared = head->shared;
   if(old_shared) {
