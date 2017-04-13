@@ -9,7 +9,7 @@
 #include <subscribers/memstore_ipc.h>
 #include <subscribers/memstore_redis.h>
 #include <util/nchan_msgid.h>
-
+#include <util/nchan_shared_string_debug.h>
 
 //macro black magic, AKA X-Macros
 #define LIST_IPC_COMMANDS(L) \
@@ -56,8 +56,8 @@ static ipc_command_codes_t ipc_cmd = {
 #define ipc_cmd(cmd, dst, data) ipc_alert(nchan_memstore_get_ipc(), dst, ipc_cmd.cmd, data, sizeof(*(data)))
 #define ipc_broadcast_cmd(cmd, data) ipc_broadcast_alert(nchan_memstore_get_ipc(), ipc_cmd.cmd, data, sizeof(*(data)))
 
-//#define DEBUG_LEVEL NGX_LOG_WARN
-#define DEBUG_LEVEL NGX_LOG_DEBUG
+#define DEBUG_LEVEL NGX_LOG_WARN
+//#define DEBUG_LEVEL NGX_LOG_DEBUG
 
 #define DBG(fmt, args...) ngx_log_error(DEBUG_LEVEL, ngx_cycle->log, 0, "IPC-HANDLERS(%i):" fmt, memstore_slot(), ##args)
 #define ERR(fmt, args...) ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "IPC-HANDLERS(%i):" fmt, memstore_slot(), ##args)
@@ -120,10 +120,11 @@ ngx_int_t memstore_ipc_send_subscribe(ngx_int_t dst, ngx_str_t *chid, memstore_c
   
   assert(memstore_str_owner(chid) == dst);
   
-  if((data.shm_chid = str_shm_copy(chid)) == NULL) {
+  if((data.shm_chid = nchan_shared_string_debug_store(shs, chid)) == NULL) {
     ERR("Out of shared memory, can't send IPC subscrive alert");
     return NGX_DECLINED;
   }
+  
   data.shared_channel_data = NULL;
   data.d.origin_chanhead = origin_chanhead;
   data.cf = cf;
@@ -212,7 +213,7 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   
   memstore_ready_chanhead_unless_stub(head);
   
-  str_shm_free(d->shm_chid);
+  nchan_shared_string_debug_clear(shs, d->shm_chid);
   str_shm_free(d->shm_chid_again);
 }
 

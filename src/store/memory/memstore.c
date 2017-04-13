@@ -1596,6 +1596,9 @@ static void init_shdata_procslots(int slot, int n) {
 //initialization
 static ngx_int_t nchan_store_init_module(ngx_cycle_t *cycle) {
   ngx_int_t          i;
+  
+  shs = shstring_debug_init();
+  
   shmtx_lock(shm);
 #if FAKESHARD
 

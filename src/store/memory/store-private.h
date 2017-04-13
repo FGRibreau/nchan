@@ -1,6 +1,7 @@
  #ifndef MEMSTORE_PRIVATE_HEADER
 #define MEMSTORE_PRIVATE_HEADER
 #include <util/shmem.h>
+#include <util/nchan_shared_string_debug.h>
 #include "ipc.h"
 //#define MEMSTORE_CHANHEAD_RESERVE_DEBUG 1
 
@@ -168,5 +169,7 @@ void memstore_chanhead_release(memstore_channel_head_t *ch, char *label);
 void memstore_chanhead_reserve(memstore_channel_head_t *ch, const char *label);
 
 uint16_t  memstore_worker_generation; //times nginx has been restarted + 1
+
+nchan_shared_string_debug_t *shs;
 
 #endif /*MEMSTORE_PRIVATE_HEADER*/
