@@ -30,7 +30,6 @@ else
   _NCHAN_HIREDIS_SRCS=""
 fi
 
-
 _NCHAN_SUBSCRIBERS_SRCS="\
   ${ngx_addon_dir}/src/subscribers/common.c \
   ${ngx_addon_dir}/src/subscribers/longpoll.c \
@@ -67,6 +66,7 @@ _NCHAN_UTIL_SRCS=" \
   $_nchan_util_dir/nchan_list.c \
   $_nchan_util_dir/ngx_nchan_hacked_slab.c \
   $_nchan_util_dir/shmem.c \
+  $_nchan_util_dir/nchan_shared_string_debug.c \
   $_nchan_util_dir/nchan_rbtree.c \
   $_nchan_util_dir/nchan_reuse_queue.c \
   $_nchan_util_dir/nchan_output.c \
