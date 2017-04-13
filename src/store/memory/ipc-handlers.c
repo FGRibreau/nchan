@@ -56,14 +56,14 @@ static ipc_command_codes_t ipc_cmd = {
 #define ipc_cmd(cmd, dst, data) ipc_alert(nchan_memstore_get_ipc(), dst, ipc_cmd.cmd, data, sizeof(*(data)))
 #define ipc_broadcast_cmd(cmd, data) ipc_broadcast_alert(nchan_memstore_get_ipc(), ipc_cmd.cmd, data, sizeof(*(data)))
 
-#define DEBUG_LEVEL NGX_LOG_WARN
-//#define DEBUG_LEVEL NGX_LOG_DEBUG
+//#define DEBUG_LEVEL NGX_LOG_WARN
+#define DEBUG_LEVEL NGX_LOG_DEBUG
 
 #define DBG(fmt, args...) ngx_log_error(DEBUG_LEVEL, ngx_cycle->log, 0, "IPC-HANDLERS(%i):" fmt, memstore_slot(), ##args)
 #define ERR(fmt, args...) ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "IPC-HANDLERS(%i):" fmt, memstore_slot(), ##args)
 
-//#define DEBUG_MEMZERO(var) ngx_memzero(var, sizeof(*(var)))
-#define DEBUG_MEMZERO(var) /*nothing*/
+#define DEBUG_MEMZERO(var) ngx_memzero(var, sizeof(*(var)))
+//#define DEBUG_MEMZERO(var) /*nothing*/
 
 //lots of copypasta here, but it's the fastest way for me to write these IPC handlers
 //maybe TODO: simplify this stuff, but probably not as it's not a performance penalty and the code is simple
