@@ -24,6 +24,7 @@ nchan_shared_string_debug_t *shstring_debug_init(void) {
     cur->str.len = 0;
     cur->str.data = &cur->data;
     cur->reserved = 0;
+    shs->free = cur;
   }
   
   ngx_shmtx_create(&shs->mutex, &shs->lock, (u_char *)"shstring debug");
@@ -61,7 +62,7 @@ ngx_str_t *nchan_shared_string_debug_store(nchan_shared_string_debug_t *shs, ngx
     cur->next = shs->used;
     shs->used = cur;
     
-    cur->reserved = 0;
+    cur->reserved = 1;
     cur->str.len = str_in->len;
     ngx_memcpy(cur->str.data, str_in->data, str_in->len);
     
@@ -107,10 +108,13 @@ ngx_int_t nchan_shared_string_debug_clear(nchan_shared_string_debug_t *shs, ngx_
   }
   cur->next = shs->free;
   cur->prev = NULL;
+  cur->reserved = 0;
   shs->free = cur;
   
   mprotect(cur, ngx_pagesize, PROT_READ);
   
   ngx_shmtx_unlock(&shs->mutex);
   mprotect(shs, sizeof(*shs), PROT_READ);
+  
+  return NGX_OK;
 }
