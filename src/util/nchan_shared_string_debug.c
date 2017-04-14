@@ -101,8 +101,10 @@ ngx_str_t *nchan_shared_string_debug_store(nchan_shared_string_debug_t *shs, ngx
   }
   
   ngx_shmtx_unlock(&shs->mutex);
-  shs->free_count--;
-  shs->used_count++;
+  if(str) {
+    shs->free_count--;
+    shs->used_count++;
+  }
   assert(shs->free_count >= 0);
   assert(shs->used_count >= 0);
   mprotect(shs, sizeof(*shs), PROT_READ);
