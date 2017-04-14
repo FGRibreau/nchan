@@ -2,7 +2,7 @@
 #define NCHAN_SHARED_STRING_DEBUG
 #include <nchan_module.h>
 
-#define NCHAN_SHARED_STRING_SLOTS 8192
+#define NCHAN_SHARED_STRING_SLOTS 32768
 
 typedef struct nchan_shared_string_debug_page_s nchan_shared_string_debug_page_t;
 struct nchan_shared_string_debug_page_s {
