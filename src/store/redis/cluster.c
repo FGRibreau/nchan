@@ -9,8 +9,8 @@
 
 #include "cluster.h"
 
-//#define DBG(fmt, args...) ngx_log_error(NGX_LOG_WARN, ngx_cycle->log, 0, "REDISTORE(CLUSTER): " fmt, ##args)
-#define DBG(args...) //
+#define DBG(fmt, args...) ngx_log_error(NGX_LOG_WARN, ngx_cycle->log, 0, "REDISTORE(CLUSTER): " fmt, ##args)
+//#define DBG(args...) //
 
 #define ERR(fmt, args...) ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "REDISTORE(CLUSTER): " fmt, ##args)
 
