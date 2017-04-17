@@ -23,6 +23,11 @@ ngx_str_t        *shm_copy_immutable_string(shmem_t *shm, ngx_str_t *str);
 void              shm_free_immutable_string(shmem_t *shm, ngx_str_t *str);
 void              shm_verify_immutable_string(shmem_t *shm, ngx_str_t *str);
 
+ngx_str_t        *shm_debug_copy_immutable_string(shmem_t *shm, ngx_str_t *str);
+void              shm_debug_free_immutable_string(shmem_t *shm, ngx_str_t *str);
+ngx_atomic_uint_t ngx_debug_atomic_fetch_add(volatile ngx_atomic_uint_t *value, int add);
+
+
 #if nginx_version <= 1011006
 void shm_set_allocd_pages_tracker(shmem_t *shm, ngx_atomic_uint_t *ptr);
 #else

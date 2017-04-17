@@ -19,6 +19,68 @@
 
 //#include <valgrind/memcheck.h>
 
+#define RSVDBG_MAX 20000
+typedef struct {
+  ngx_shmtx_sh_t  lock;
+  ngx_shmtx_t     mutex;
+  int             reserved_sz;
+  void           *reserved[RSVDBG_MAX][2];
+} reserved_debug_t;
+
+static reserved_debug_t *rsvdbg = NULL;
+
+
+void rsvdbg_reserve(void *ptr, size_t sz) {
+  int     i;
+  ngx_shmtx_lock(&rsvdbg->mutex);
+  rsvdbg->reserved_sz++;
+  i = rsvdbg->reserved_sz-1;
+  rsvdbg->reserved[i][0]=ptr;
+  rsvdbg->reserved[i][1]=(char *)ptr + sz;  
+  ngx_shmtx_unlock(&rsvdbg->mutex);
+}
+
+void rsvdbg_release(void *ptr) {
+  int     i, found = 0;
+  int last = rsvdbg->reserved_sz - 1;
+  ngx_shmtx_lock(&rsvdbg->mutex);
+  for(i=0; i <= last; i++) {
+    if(rsvdbg->reserved[i][0]==ptr) {
+      rsvdbg->reserved[i][0]=rsvdbg->reserved[last][0];
+      rsvdbg->reserved[i][1]=rsvdbg->reserved[last][1];
+      rsvdbg->reserved[last][0] = NULL;
+      rsvdbg->reserved[last][1] = NULL;
+      rsvdbg->reserved_sz--;
+      found = 1;
+      break;
+    }
+  }
+  ngx_shmtx_unlock(&rsvdbg->mutex);
+  assert(found);
+}
+
+void rsvdbg_check(void *ptr, size_t sz) {
+  int i;
+  void *in_start, *in_end, *start, *end;
+  ngx_shmtx_lock(&rsvdbg->mutex);
+  in_start = ptr;
+  in_end = (char *)ptr + sz;
+  for(i=0; i < rsvdbg->reserved_sz; i++) {
+    start = rsvdbg->reserved[i][0];
+    end = rsvdbg->reserved[i][1];
+    assert(start != NULL && end != NULL);
+    assert(!(in_start <= start && in_end >= start));
+    assert(!(in_start <= end   && in_end >= end));
+    assert(!(in_start >= start && in_end <= end));
+  }
+  ngx_shmtx_unlock(&rsvdbg->mutex);
+}
+
+ngx_atomic_uint_t ngx_debug_atomic_fetch_add(volatile ngx_atomic_uint_t *value, int add) {
+  rsvdbg_check((void *)value, sizeof(*value));
+  return ngx_atomic_fetch_add(value, add);
+}
+
 //shared memory
 shmem_t *shm_create(ngx_str_t *name, ngx_conf_t *cf, size_t shm_size, ngx_int_t (*init)(ngx_shm_zone_t *, void *), void *privdata) {
 
@@ -46,6 +108,11 @@ shmem_t *shm_create(ngx_str_t *name, ngx_conf_t *cf, size_t shm_size, ngx_int_t 
 
   zone->init = init;
   zone->data = (void *) 1;
+  
+  rsvdbg = mmap(NULL, sizeof(*rsvdbg), PROT_READ|PROT_WRITE, MAP_ANON|MAP_SHARED, -1, 0);
+  ngx_memzero(rsvdbg, sizeof(*rsvdbg));
+  ngx_shmtx_create(&rsvdbg->mutex, &rsvdbg->lock, (u_char *)"reserved memory debug");
+  
   return shm;
 }
 
@@ -221,3 +288,26 @@ ngx_str_t *shm_copy_immutable_string(shmem_t *shm, ngx_str_t *str_in) {
   ngx_memcpy(str->data, str_in->data, str_in->len);
   return str;
 }
+
+ngx_str_t *shm_debug_copy_immutable_string(shmem_t *shm, ngx_str_t *str_in) {
+  ngx_str_t    *str;
+  size_t        sz = sizeof(*str) + str_in->len;
+  shmtx_lock(shm);
+  if((str = shm_locked_alloc(shm, sz, "string")) == NULL) {
+    return NULL;
+  }
+  rsvdbg_reserve(str, sz);
+  str->data=(u_char *)&str[1];
+  str->len=str_in->len;
+  ngx_memcpy(str->data, str_in->data, str_in->len);
+  shmtx_unlock(shm);
+  return str;
+}
+
+void shm_debug_free_immutable_string(shmem_t *shm, ngx_str_t *str) {
+  shmtx_lock(shm);
+  rsvdbg_release(str);
+  shm_locked_free(shm, (void *)str);
+  shmtx_unlock(shm);
+}
+

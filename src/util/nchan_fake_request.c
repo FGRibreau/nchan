@@ -26,7 +26,7 @@ ngx_connection_t *nchan_create_fake_connection(ngx_pool_t *pool) {
   }
 
   c->fd = (ngx_socket_t) -1;
-  c->number = ngx_atomic_fetch_add(ngx_connection_counter, 1);
+  c->number = ngx_debug_atomic_fetch_add(ngx_connection_counter, 1);
 
   if (pool) {
     c->pool = pool;

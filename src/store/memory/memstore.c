@@ -601,7 +601,7 @@ static ngx_int_t initialize_shm(ngx_shm_zone_t *zone, void *data) {
 
 void __memstore_update_stub_status(off_t offset, int count) {
   if(nchan_stub_status_enabled) {
-    ngx_atomic_fetch_add((ngx_atomic_uint_t *)((char *)&shdata->stats + offset), count);
+    ngx_debug_atomic_fetch_add((ngx_atomic_uint_t *)((char *)&shdata->stats + offset), count);
   }
 }
 
@@ -775,13 +775,13 @@ static void memstore_spooler_add_handler(channel_spooler_t *spl, subscriber_t *s
     head->internal_sub_count++;
     if(head->shared) {
       assert(CHANHEAD_SHARED_OKAY(head));
-      ngx_atomic_fetch_add(&head->shared->internal_sub_count, 1);
+      ngx_debug_atomic_fetch_add(&head->shared->internal_sub_count, 1);
     }
   }
   else {
     if(head->shared) {
       assert(CHANHEAD_SHARED_OKAY(head));
-      ngx_atomic_fetch_add(&head->shared->sub_count, 1);
+      ngx_debug_atomic_fetch_add(&head->shared->sub_count, 1);
     }
     if(head->cf && head->cf->redis.enabled && head->cf->redis.storage_mode == REDIS_MODE_DISTRIBUTED && !head->multi) {
       memstore_fakesub_add(head, 1);
@@ -811,12 +811,12 @@ static void memstore_spooler_bulk_dequeue_handler(channel_spooler_t *spl, subscr
     //internal subscribers are *special* and don't really count
     head->internal_sub_count -= count;
     if(head->shared) {
-      ngx_atomic_fetch_add(&head->shared->internal_sub_count, -count);
+      ngx_debug_atomic_fetch_add(&head->shared->internal_sub_count, -count);
     }
   }
   else {
     if(head->shared){
-      ngx_atomic_fetch_add(&head->shared->sub_count, -count);
+      ngx_debug_atomic_fetch_add(&head->shared->sub_count, -count);
     }
     /*
     else if(head->shared == NULL) {
@@ -1597,7 +1597,7 @@ static void init_shdata_procslots(int slot, int n) {
 static ngx_int_t nchan_store_init_module(ngx_cycle_t *cycle) {
   ngx_int_t          i;
   
-  shs = shstring_debug_init();
+  //shs = shstring_debug_init();
   
   shmtx_lock(shm);
 #if FAKESHARD
@@ -1877,7 +1877,7 @@ static ngx_int_t chanhead_delete_message(memstore_channel_head_t *ch, store_mess
   
   ch->channel.messages--;
   
-  ngx_atomic_fetch_add(&ch->shared->stored_message_count, -1);
+  ngx_debug_atomic_fetch_add(&ch->shared->stored_message_count, -1);
   
   if(ch->groupnode) {
     memstore_group_remove_message(ch->groupnode, msg->msg);
@@ -2752,8 +2752,8 @@ static ngx_int_t chanhead_push_message(memstore_channel_head_t *ch, store_messag
     ch->msg_first = msg;
   }
   ch->channel.messages++;
-  ngx_atomic_fetch_add(&ch->shared->stored_message_count, 1);
-  ngx_atomic_fetch_add(&ch->shared->total_message_count, 1);
+  ngx_debug_atomic_fetch_add(&ch->shared->stored_message_count, 1);
+  ngx_debug_atomic_fetch_add(&ch->shared->total_message_count, 1);
 
   if(ch->groupnode) {
     memstore_group_add_message(ch->groupnode, msg->msg);
@@ -2902,7 +2902,7 @@ static nchan_msg_t *create_shm_msg(nchan_msg_t *m) {
 }
 
 ngx_int_t msg_reserve(nchan_msg_t *msg, char *lbl) {
-  ngx_atomic_fetch_add((ngx_atomic_uint_t *)&msg->refcount, 1);
+  ngx_debug_atomic_fetch_add((ngx_atomic_uint_t *)&msg->refcount, 1);
   assert(msg->refcount >= 0);
   if(msg->refcount < 0) {
     msg->refcount = MSG_REFCOUNT_INVALID;
@@ -2960,7 +2960,7 @@ ngx_int_t msg_release(nchan_msg_t *msg, char *lbl) {
   shmtx_unlock(shm);
 #endif
   assert(msg->refcount > 0);
-  ngx_atomic_fetch_add((ngx_atomic_uint_t *)&msg->refcount, -1);
+  ngx_debug_atomic_fetch_add((ngx_atomic_uint_t *)&msg->refcount, -1);
   //DBG("msg %p released (%i) %s", msg, msg->refcount, lbl);
   return NGX_OK;
 }

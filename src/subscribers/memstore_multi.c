@@ -35,7 +35,7 @@ static void change_sub_count(memstore_channel_head_t *ch, ngx_int_t n) {
   ch->total_sub_count += n;
   ch->channel.subscribers += n;
   if(ch->shared) {
-    ngx_atomic_fetch_add(&ch->shared->sub_count, n);
+    ngx_debug_atomic_fetch_add(&ch->shared->sub_count, n);
   }
   if(ch->cf->redis.enabled) {
     memstore_fakesub_add(ch, n);

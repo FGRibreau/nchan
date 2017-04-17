@@ -87,6 +87,18 @@ static void str_shm_free(ngx_str_t *str) {
   shm_free_immutable_string(nchan_memstore_get_shm(), str);
 }
 
+static ngx_str_t *str_shm_dbg_copy(ngx_str_t *str){
+  ngx_str_t *out;
+  out = shm_debug_copy_immutable_string(nchan_memstore_get_shm(), str);
+  DBG("create shm_str_dbg %p (data@ %p) %V", out, out->data, out);
+  return out;
+}
+
+static void str_shm_dbg_free(ngx_str_t *str) {
+  DBG("free shm_str_dbg %V @ %p", str, str->data);
+  shm_debug_free_immutable_string(nchan_memstore_get_shm(), str);
+}
+
 ////////// SUBSCRIBE ////////////////
 union subdata_u {
   memstore_channel_head_t     *origin_chanhead;
@@ -96,6 +108,7 @@ union subdata_u {
 typedef struct {
   ngx_int_t                    pad;
   ngx_str_t                   *shm_chid;
+  ngx_str_t                    shm_chid_dup;
   store_channel_head_shm_t    *shared_channel_data;
   nchan_loc_conf_t            *cf;
   ngx_str_t                   *shm_chid_again;
@@ -107,6 +120,8 @@ static void verify_subdata(subscribe_data_t *d, ngx_int_t match_owher_slot) {
   assert(d->pad == 3483712);
   assert(nchan_ngx_str_match(d->shm_chid, d->shm_chid_again));
   if(match_owher_slot >= 0) {
+    assert(d->shm_chid->len == d->shm_chid_dup.len);
+    assert(d->shm_chid->data == d->shm_chid_dup.data);
     assert(memstore_str_owner(d->shm_chid) == match_owher_slot);
     assert(memstore_str_owner(d->shm_chid_again) == match_owher_slot);
   }
@@ -120,10 +135,11 @@ ngx_int_t memstore_ipc_send_subscribe(ngx_int_t dst, ngx_str_t *chid, memstore_c
   
   assert(memstore_str_owner(chid) == dst);
   
-  if((data.shm_chid = nchan_shared_string_debug_store(shs, chid)) == NULL) {
+  if((data.shm_chid = str_shm_dbg_copy(chid)) == NULL) {
     ERR("Out of shared memory, can't send IPC subscrive alert");
     return NGX_DECLINED;
   }
+  data.shm_chid_dup = *data.shm_chid;
   
   data.shared_channel_data = NULL;
   data.d.origin_chanhead = origin_chanhead;
@@ -131,7 +147,7 @@ ngx_int_t memstore_ipc_send_subscribe(ngx_int_t dst, ngx_str_t *chid, memstore_c
   
   //debug stuff
   data.pad = 3483712;
-  data.shm_chid_again = str_shm_copy(chid);
+  data.shm_chid_again = str_shm_dbg_copy(chid);
   verify_subdata(&data, dst);
   
   return ipc_cmd(subscribe, dst, &data);
@@ -196,8 +212,8 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   if(old_shared == NULL) {
     //ERR("%V local total_sub_count %i, internal_sub_count %i", &head->id,  head->sub_count, head->internal_sub_count);
     assert(head->total_sub_count >= head->internal_sub_count);
-    ngx_atomic_fetch_add(&head->shared->sub_count, head->total_sub_count - head->internal_sub_count);
-    ngx_atomic_fetch_add(&head->shared->internal_sub_count, head->internal_sub_count);
+    ngx_debug_atomic_fetch_add(&head->shared->sub_count, head->total_sub_count - head->internal_sub_count);
+    ngx_debug_atomic_fetch_add(&head->shared->internal_sub_count, head->internal_sub_count);
   }
   else {
     ERR("%V sub count already shared, don't update", &head->id);
@@ -213,8 +229,8 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   
   memstore_ready_chanhead_unless_stub(head);
   
-  nchan_shared_string_debug_clear(shs, d->shm_chid);
-  str_shm_free(d->shm_chid_again);
+  str_shm_dbg_free(d->shm_chid);
+  str_shm_dbg_free(d->shm_chid_again);
 }
 
 

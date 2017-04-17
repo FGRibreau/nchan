@@ -55,6 +55,7 @@
 #define ngx_slab_junk(p, size)
 
 #endif
+#include <util/shmem.h>
 
 static ngx_slab_page_t *nchan_slab_alloc_pages(ngx_slab_pool_t *pool,
     ngx_uint_t pages);
@@ -91,7 +92,7 @@ nchan_slab_init(ngx_slab_pool_t *pool)
 
 static void nchan_track_slab_reserved_pages(ngx_slab_pool_t *pool, ngx_int_t pages) {
   if(nchan_slab_reserved_pagecount) {
-    ngx_atomic_fetch_add(nchan_slab_reserved_pagecount, pages);
+    ngx_debug_atomic_fetch_add(nchan_slab_reserved_pagecount, pages);
   }
   else {
     nchan_slab_reserved_pagecount_temp += pages;
