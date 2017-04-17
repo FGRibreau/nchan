@@ -98,13 +98,12 @@ ngx_str_t *nchan_shared_string_debug_store(nchan_shared_string_debug_t *shs, ngx
     mprotect(cur, ngx_pagesize, PROT_READ);
     
     str = &cur->str;
-  }
-  
-  ngx_shmtx_unlock(&shs->mutex);
-  if(str) {
+    
     shs->free_count--;
     shs->used_count++;
   }
+  
+  ngx_shmtx_unlock(&shs->mutex);
   assert(shs->free_count >= 0);
   assert(shs->used_count >= 0);
   mprotect(shs, sizeof(*shs), PROT_READ);
@@ -149,6 +148,7 @@ ngx_int_t nchan_shared_string_debug_clear(nchan_shared_string_debug_t *shs, ngx_
   
   shs->free_count++;
   shs->used_count--;
+  
   assert(shs->free_count >= 0);
   assert(shs->used_count >= 0);
   
