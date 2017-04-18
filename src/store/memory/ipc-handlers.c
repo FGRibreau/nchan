@@ -173,6 +173,9 @@ static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
     verify_subdata(d, myslot);
     d->d.subscriber = ipc_sub;
     d->shared_channel_data = head->shared;
+    
+    ngx_atomic_fetch_add(&head->shared->gc.outside_refcount, 1); //it's awkward to put this refcount here, but necessary.
+    
     assert(d->shared_channel_data);
   }
   verify_subdata(d, myslot);
