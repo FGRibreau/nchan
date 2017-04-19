@@ -24,8 +24,8 @@
 static ngx_int_t redis_fakesub_timer_interval;
 #define REDIS_DEFAULT_FAKESUB_TIMER_INTERVAL 100;
 
-//#define DEBUG_LEVEL NGX_LOG_WARN
-#define DEBUG_LEVEL NGX_LOG_DEBUG
+#define DEBUG_LEVEL NGX_LOG_WARN
+//#define DEBUG_LEVEL NGX_LOG_DEBUG
 
 #if FAKESHARD
 
@@ -35,6 +35,7 @@ static ngx_int_t redis_fakesub_timer_interval;
 #else
 
 #define DBG(fmt, args...) ngx_log_error(DEBUG_LEVEL, ngx_cycle->log, 0, "MEMSTORE:%02i: " fmt, memstore_slot(), ##args)
+#define WARN(fmt, args...) ngx_log_error(NGX_LOG_WARN, ngx_cycle->log, 0, "MEMSTORE:%02i: " fmt, memstore_slot(), ##args)
 #define ERR(fmt, args...) ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "MEMSTORE:%02i: " fmt, memstore_slot(), ##args)
 
 #endif
@@ -636,6 +637,8 @@ static int send_redis_fakesub_delta(memstore_channel_head_t *head) {
 static void memstore_reap_chanhead(memstore_channel_head_t *ch) {
   int       i;
   
+  DBG("chanhead %p (%V) is empty and expired. DELETE.", ch, &ch->id);
+  
   chanhead_messages_delete(ch);
   
   if(ch->total_sub_count > 0) {
@@ -650,11 +653,13 @@ static void memstore_reap_chanhead(memstore_channel_head_t *ch) {
   }
   if(ch->owner == memstore_slot()) {
     nchan_update_stub_status(channels, -1);
-    if(ch->shared)
+    if(ch->shared) {
+      assert(ch->shared->gc.outside_refcount == 0);
       shm_free(shm, ch->shared);
+      WARN("freed channel %V shdata %p", ch->id, ch->shared);
+    }
   }
   
-  DBG("chanhead %p (%V) is empty and expired. DELETE.", ch, &ch->id);
   CHANNEL_HASH_DEL(ch);
   if(ch->redis_sub) {
     if(ch->redis_sub->enqueued) {
@@ -1911,7 +1916,7 @@ static ngx_int_t chanhead_messages_gc_custom(memstore_channel_head_t *ch, ngx_in
   store_message_t   *next = NULL;
   time_t             now = ngx_time();
   ngx_int_t          started_count, tried_count, deleted_count;
-  DBG("chanhead_gc max %i count %i", max_messages, ch->channel.messages);
+  //DBG("chanhead_gc max %i count %i", max_messages, ch->channel.messages);
   
   started_count = ch->channel.messages;
   tried_count = 0;
@@ -1933,7 +1938,7 @@ static ngx_int_t chanhead_messages_gc_custom(memstore_channel_head_t *ch, ngx_in
     chanhead_delete_message(ch, cur);
     cur = next;
   }
-  DBG("message GC results: started with %i, walked %i, deleted %i msgs", started_count, tried_count, deleted_count);
+  //DBG("message GC results: started with %i, walked %i, deleted %i msgs", started_count, tried_count, deleted_count);
   validate_chanhead_messages(ch);
   return NGX_OK;
 }
@@ -2612,10 +2617,10 @@ static ngx_int_t nchan_store_async_get_multi_message(ngx_str_t *chid, nchan_msg_
         || (lastid->time == req_msgid[i].time && lastid->tag.fixed[0] >= req_msgid[i].tag.fixed[0])) {
         want[i]=1;
         getting++;
-        DBG("want %i", i);
+        //DBG("want %i", i);
       }
       else {
-        DBG("Do not want %i", i);
+        //DBG("Do not want %i", i);
       }
     }
   }

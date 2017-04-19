@@ -60,6 +60,7 @@ static ipc_command_codes_t ipc_cmd = {
 #define DEBUG_LEVEL NGX_LOG_DEBUG
 
 #define DBG(fmt, args...) ngx_log_error(DEBUG_LEVEL, ngx_cycle->log, 0, "IPC-HANDLERS(%i):" fmt, memstore_slot(), ##args)
+#define WARN(fmt, args...) ngx_log_error(NGX_LOG_WARN, ngx_cycle->log, 0, "IPC-HANDLERS(%i):" fmt, memstore_slot(), ##args)
 #define ERR(fmt, args...) ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "IPC-HANDLERS(%i):" fmt, memstore_slot(), ##args)
 
 #define DEBUG_MEMZERO(var) ngx_memzero(var, sizeof(*(var)))
@@ -128,7 +129,7 @@ static void verify_subdata(subscribe_data_t *d, ngx_int_t match_owher_slot) {
 }
 
 ngx_int_t memstore_ipc_send_subscribe(ngx_int_t dst, ngx_str_t *chid, memstore_channel_head_t *origin_chanhead, nchan_loc_conf_t *cf) {
-  DBG("send subscribe to %i, %V", dst, chid);
+  WARN("send subscribe to %i, %V", dst, chid);
 
   subscribe_data_t   data; 
   DEBUG_MEMZERO(&data);
@@ -158,7 +159,7 @@ static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
   ngx_int_t                   myslot = memstore_slot();
   verify_subdata(d, myslot);
   
-  DBG("received subscribe request for channel %V", d->shm_chid);
+  WARN("received subscribe request for channel %V", d->shm_chid);
   head = nchan_memstore_get_chanhead(d->shm_chid, d->cf);
   
   verify_subdata(d, myslot);
@@ -180,8 +181,8 @@ static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
   }
   verify_subdata(d, myslot);
   
+  WARN("send subscribe reply for channel %V to %i", d->shm_chid, sender);
   ipc_cmd(subscribe_reply, sender, d);
-  DBG("sent subscribe reply for channel %V to %i", d->shm_chid, sender);
   
   if(ipc_sub) {
     head->spooler.fn->add(&head->spooler, ipc_sub);
@@ -190,7 +191,7 @@ static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
 static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   memstore_channel_head_t      *head;
   store_channel_head_shm_t     *old_shared;
-  DBG("received subscribe reply for channel %V", d->shm_chid);
+  WARN("received subscribe reply for channel %V (incoming shared data %p)", d->shm_chid, d->shared_channel_data);
   //we have the chanhead address, but are too afraid to use it.
   verify_subdata(d, sender);
   
@@ -209,7 +210,6 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   if(old_shared) {
     assert(old_shared == d->shared_channel_data);
   }
-  DBG("receive subscribe proceed to do ipc_sub stuff");
   head->shared = d->shared_channel_data;
   
   if(old_shared == NULL) {
@@ -245,7 +245,7 @@ typedef struct {
 } unsubscribed_data_t;
 
 ngx_int_t memstore_ipc_send_unsubscribed(ngx_int_t dst, ngx_str_t *chid, void* privdata) {
-  DBG("send unsubscribed to %i %V", dst, chid);
+  WARN("send unsubscribed to %i %V", dst, chid);
   unsubscribed_data_t        data = {str_shm_copy(chid), privdata};
   if(data.shm_chid == NULL) {
     ERR("Out of shared memory, can't send IPC unsubscribe alert");
@@ -254,7 +254,7 @@ ngx_int_t memstore_ipc_send_unsubscribed(ngx_int_t dst, ngx_str_t *chid, void* p
   return ipc_cmd(unsubscribed, dst, &data);
 }
 static void receive_unsubscribed(ngx_int_t sender, unsubscribed_data_t *d) {
-  DBG("received unsubscribed request for channel %V privdata %p", d->shm_chid, d->privdata);
+  WARN("received unsubscribed request for channel %V privdata %p", d->shm_chid, d->privdata);
   if(memstore_channel_owner(d->shm_chid) != memstore_slot()) {
     memstore_channel_head_t    *head;
     //find channel
@@ -266,13 +266,13 @@ static void receive_unsubscribed(ngx_int_t sender, unsubscribed_data_t *d) {
     }
     //gc if no subscribers
     if(head->total_sub_count == 0) {
-      DBG("add %p to GC", head);
+      WARN("add %p to GC (because 0 subscribers)", head);
       head->foreign_owner_ipc_sub = NULL;
       chanhead_gc_add(head, "received UNSUBSCRIVED over ipc, sub_count == 0");
     }
     else {
       //subscribe again?...
-      DBG("maybe subscribe again?...");
+      WARN("maybe subscribe again?...");
     }
   }
   else {
@@ -571,7 +571,7 @@ ngx_int_t memstore_ipc_send_delete(ngx_int_t dst, ngx_str_t *chid, callback_pt c
   if(data.shm_chid == NULL) {
     return NGX_ERROR;
   }
-  DBG("IPC: send delete to %i ch %V", dst, chid);
+  WARN("IPC: send delete to %i ch %V", dst, chid);
   return ipc_cmd(delete, dst, &data);
 }
 
@@ -579,7 +579,7 @@ static ngx_int_t delete_callback_handler(ngx_int_t, nchan_channel_t *, delete_da
 
 static void receive_delete(ngx_int_t sender, delete_data_t *d) {
   d->sender = sender;
-  DBG("IPC received delete request for channel %V privdata %p", d->shm_chid, d->privdata);
+  WARN("IPC received delete request for channel %V privdata %p", d->shm_chid, d->privdata);
   nchan_memstore_force_delete_channel(d->shm_chid, (callback_pt )delete_callback_handler, d);
 }
 
