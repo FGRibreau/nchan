@@ -15,6 +15,7 @@
 #define LIST_IPC_COMMANDS(L) \
   L(subscribe) \
   L(subscribe_reply) \
+  L(subscribe_chanhead_release) \
   L(unsubscribed) \
   L(publish_message) \
   L(publish_message_reply) \
@@ -101,28 +102,19 @@ static void str_shm_dbg_free(ngx_str_t *str) {
 }
 
 ////////// SUBSCRIBE ////////////////
-union subdata_u {
-  memstore_channel_head_t     *origin_chanhead;
-  subscriber_t                *subscriber;
-};
-
 typedef struct {
-  ngx_int_t                    pad;
   ngx_str_t                   *shm_chid;
-  ngx_str_t                    shm_chid_dup;
   store_channel_head_shm_t    *shared_channel_data;
   nchan_loc_conf_t            *cf;
   ngx_str_t                   *shm_chid_again;
-  union subdata_u              d;
-  
+  memstore_channel_head_t     *origin_chanhead;
+  memstore_channel_head_t     *owner_chanhead;
+  subscriber_t                *subscriber;
 } subscribe_data_t;
 
 static void verify_subdata(subscribe_data_t *d, ngx_int_t match_owher_slot) {
-  assert(d->pad == 3483712);
   assert(nchan_ngx_str_match(d->shm_chid, d->shm_chid_again));
   if(match_owher_slot >= 0) {
-    assert(d->shm_chid->len == d->shm_chid_dup.len);
-    assert(d->shm_chid->data == d->shm_chid_dup.data);
     assert(memstore_str_owner(d->shm_chid) == match_owher_slot);
     assert(memstore_str_owner(d->shm_chid_again) == match_owher_slot);
   }
@@ -140,14 +132,13 @@ ngx_int_t memstore_ipc_send_subscribe(ngx_int_t dst, ngx_str_t *chid, memstore_c
     ERR("Out of shared memory, can't send IPC subscrive alert");
     return NGX_DECLINED;
   }
-  data.shm_chid_dup = *data.shm_chid;
   
   data.shared_channel_data = NULL;
-  data.d.origin_chanhead = origin_chanhead;
+  data.origin_chanhead = origin_chanhead;
+  data.owner_chanhead = NULL;
   data.cf = cf;
   
   //debug stuff
-  data.pad = 3483712;
   data.shm_chid_again = str_shm_dbg_copy(chid);
   verify_subdata(&data, dst);
   
@@ -167,13 +158,15 @@ static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
   if(head == NULL) {
     ERR("couldn't get chanhead while receiving subscribe ipc msg");
     d->shared_channel_data = NULL;
-    d->d.subscriber = NULL;
+    d->subscriber = NULL;
   }
   else {
-    ipc_sub = memstore_ipc_subscriber_create(sender, &head->id, d->cf, d->d.origin_chanhead);
+    ipc_sub = memstore_ipc_subscriber_create(sender, &head->id, d->cf, d->origin_chanhead);
     verify_subdata(d, myslot);
-    d->d.subscriber = ipc_sub;
+    d->subscriber = ipc_sub;
     d->shared_channel_data = head->shared;
+    d->owner_chanhead = head;
+    memstore_chanhead_reserve(head, "interprocess subscribe");
     
     ngx_atomic_fetch_add(&head->shared->gc.outside_refcount, 1); //it's awkward to put this refcount here, but necessary.
     
@@ -182,11 +175,12 @@ static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
   verify_subdata(d, myslot);
   
   WARN("send subscribe reply for channel %V to %i", d->shm_chid, sender);
-  ipc_cmd(subscribe_reply, sender, d);
-  
   if(ipc_sub) {
     head->spooler.fn->add(&head->spooler, ipc_sub);
   }
+  
+  ipc_cmd(subscribe_reply, sender, d);
+  DBG("sent subscribe reply for channel %V to %i", d->shm_chid, sender);
 }
 static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   memstore_channel_head_t      *head;
@@ -195,7 +189,7 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   //we have the chanhead address, but are too afraid to use it.
   verify_subdata(d, sender);
   
-  if(!d->shared_channel_data && !d->d.subscriber) {
+  if(!d->shared_channel_data && !d->subscriber) {
     ERR("failed to subscribe");
     return;
   }
@@ -224,18 +218,26 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
   
   assert(head->shared != NULL);
   if(head->foreign_owner_ipc_sub) {
-    assert(head->foreign_owner_ipc_sub == d->d.subscriber);
+    assert(head->foreign_owner_ipc_sub == d->subscriber);
   }
   else {
-    head->foreign_owner_ipc_sub = d->d.subscriber;
+    head->foreign_owner_ipc_sub = d->subscriber;
   }
   
   memstore_ready_chanhead_unless_stub(head);
   
   str_shm_dbg_free(d->shm_chid);
   str_shm_dbg_free(d->shm_chid_again);
+  
+  if(d->owner_chanhead) {
+    ipc_cmd(subscribe_chanhead_release, sender, d);
+  }
 }
 
+static void receive_subscribe_chanhead_release(ngx_int_t sender, subscribe_data_t *d) {
+  DBG("release the %V", &d->owner_chanhead->id);
+  memstore_chanhead_release(d->owner_chanhead, "interprocess subscribe");
+}
 
 
 ////////// UNSUBSCRIBED ////////////////
