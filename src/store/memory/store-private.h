@@ -61,6 +61,10 @@ struct memstore_channel_head_s {
   ngx_int_t                       gc_queued_times; // useful for debugging
   store_channel_head_shm_t       *shared;
   
+  time_t                          created_at;
+  time_t                          sent_subscribe_alert_at;
+  time_t                          got_subscribe_alert_reply_at;
+  
   ngx_uint_t                      max_messages;
   store_message_t                *msg_first;
   store_message_t                *msg_last;

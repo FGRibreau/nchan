@@ -115,7 +115,9 @@ ngx_int_t memstore_ipc_send_subscribe(ngx_int_t dst, ngx_str_t *chid, memstore_c
   
   assert(memstore_str_owner(data.shm_chid) == dst);
   
-  return ipc_cmd(subscribe, dst, &data);
+  ngx_int_t rc = ipc_cmd(subscribe, dst, &data);
+  origin_chanhead->sent_subscribe_alert_at = ngx_time();
+  return rc;
 }
 static void receive_subscribe(ngx_int_t sender, subscribe_data_t *d) {
   memstore_channel_head_t    *head;
@@ -165,6 +167,7 @@ static void receive_subscribe_reply(ngx_int_t sender, subscribe_data_t *d) {
     }
     DBG("receive subscribe proceed to do ipc_sub stuff");
     head->shared = d->shared_channel_data;
+    head->got_subscribe_alert_reply_at = ngx_time();
     
     if(old_shared == NULL) {
       //ERR("%V local total_sub_count %i, internal_sub_count %i", &head->id,  head->sub_count, head->internal_sub_count);

@@ -1013,6 +1013,9 @@ static memstore_channel_head_t *chanhead_memstore_create(ngx_str_t *channel_id, 
   head->in_churn_queue = 0;
   head->gc_queued_times = 0;
   head->redis_sub = NULL;
+  
+  head->created_at = ngx_time();
+  
   if(cf) {
     head->stub = 0;
     head->cf=cf;
